@@ -1,17 +1,35 @@
 from flask import Flask, render_template, request
 import logging
-import socket  # Módulo para obter informações do servidor
+import socket
+from prometheus_client import make_wsgi_app, Counter, Histogram
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 app = Flask(__name__,
             static_url_path='', 
             static_folder='static',
             template_folder='templates')
 
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
+    '/metrics': make_wsgi_app()
+})
+
+REQUEST_COUNT = Counter(
+    'app_request_count',
+    'Application Request Count',
+    ['method', 'endpoint', 'http_status']
+)
+REQUEST_LATENCY = Histogram(
+    'app_request_latency_seconds',
+    'Application Request Latency',
+    ['method', 'endpoint']
+)
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     # Obter informações do servidor
     hostname = socket.gethostname()
     ip_address = socket.gethostbyname(hostname)
+    REQUEST_COUNT.labels('GET', '/', 200).inc()
 
     if request.method == 'GET':  
         return render_template('index.html', hostname=hostname, ip_address=ip_address)
